@@ -1,0 +1,118 @@
+---
+title: "Antibody labeling-negative controls"
+author: "Alison Tebo"
+date: "2/21/2020"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("BiocManager")
+BiocManager::install("flowCore")
+BiocManager::install("ggcyto")
+BiocManager::install("openCyto")
+install.packages("viridisLite")
+install.packages("scales")
+```
+
+```{r call packages}
+library(data.table)
+library(flowCore)
+library(ggplot2)
+library(ggcyto)
+library(ggpointdensity)
+library(viridis)
+library(openCyto)
+library(scales)
+```
+
+```{r import data}
+#setwd("./antibody labeling-negative controls")
+files <- list() #imports all the .fcs files in the folder
+listfcs <- dir(pattern = "*.fcs")
+for (k in 1:length(listfcs)){
+  files[[k]] <- read.FCS(listfcs[k])
+}
+```
+
+While all the samples are loaded into the workspace, each sample is called individually for treatment, mostly due to constraints of the singletGate function of opencyto.
+
+```{r initial gating}
+channel <- c("FSC-A", "SSC-A")
+nd <- openCyto:::.boundary(files[[4]], channels = channel, min = c(0, 0), max=c(2.5e5,2.5e5)) #boundary (square) gate to select for non-debris events. Standard thresholds for all samples.
+p1 <- autoplot(files[[4]], x = "FSC-A", y = "SSC-A")
+p1 + geom_gate(nd) #plot to check quality of gate
+ndsub <- Subset(files[[4]], nd) #create subset of data based on gate nd
+#ndsubplot <- autoplot(ndsub, x = "FSC-A", y = "SSC-A")
+chnls <- c("FSC-A","FSC-H")
+singlets <- openCyto:::.singletGate(ndsub, channels = chnls) #gate on singlet events only, operation only works on flowFrame data type
+p2 <- autoplot(ndsub, x= "FSC-A", y= "FSC-H")
+p2 + geom_gate(singlets) #plot to check quality 
+singlets_sub <- Subset(ndsub,singlets) #creates subset of singlets
+tf <- estimateLogicle(singlets_sub, channels = c("B1-A")) #transform function to transform to logicle scale. Parks, Roederer and Moore Cytometry A 2006 doi: 10.1002/cyto.a.20258
+tf
+singlets_sub <- transform(singlets_sub,tf)
+p <- autoplot(singlets_sub, "B1-A")
+p
+singlets_sub #header reads out stats
+files[[4]] #total events analyzed
+ndsub #intermediate gate count
+```
+
+Plot gating scheme for supplementary information
+
+```{r plotting gating schemes}
+f1 <- ggcyto(files[[4]], aes(x = 'FSC-A', y = 'SSC-A')) #plots non-debris gate
+f1 + geom_hex(bins=75) + geom_gate(nd) + geom_stats() +
+  theme_classic() +
+  theme(panel.border = element_rect(colour = "black", fill = NA, size = 0.5),
+        axis.text = element_text(size = 14),
+        axis.ticks = element_line(size = 1),
+        axis.title = element_text(size = 14),
+        aspect.ratio = 1,
+        legend.position = "none")+
+  #scale_fill_distiller(palette = "Greys") +
+  scale_fill_gradientn(colours = viridis(256, option = "C"))+
+  xlab("FSC-A")+
+  ylab("SSC-A")
+f2 <- ggcyto(ndsub, aes(x='FSC-A', y='FSC-H')) #plots singlets gate
+f2 + geom_hex(bins=75) + geom_gate(singlets) + geom_stats(type = "count") +
+  scale_x_continuous(breaks=c(0,100000,200000), labels = scientific) +
+  scale_y_continuous(labels = scientific) +
+  theme_classic() +
+  theme(panel.border = element_rect(colour = "black", fill = NA, size = 0.5),
+        axis.text = element_text(size = 14),
+        axis.ticks = element_line(size = 1),
+        axis.title = element_text(size = 14),
+        aspect.ratio = 1,
+        legend.position = "none",
+        )+
+  #scale_fill_distiller(palette = "Greys") +
+  scale_fill_gradientn(colours = viridis(256, option = "C"))+
+  xlab("FSC-A")+
+  ylab("FSC-H")
+```
+
+Plotting figures for Extended Data
+
+```{r plotting final figures Extendend Data}
+#to make final figures:
+f <- ggcyto(singlets_sub, aes(x= 'B1-A'))
+f + geom_density(fill = "#000066", alpha = 0.6, size = 1) + # antibody only
+  #coord_cartesian(xlim= c(0,4.5), ylim = c(0,4.5)) + #activate for red vs green figures
+  theme_classic() +
+  theme(panel.border = element_rect(colour = "black", fill = NA, size = 0.5),
+        axis.text = element_text(size = 14),
+        axis.ticks = element_line(size = 1),
+        axis.title = element_text(size = 14),
+        aspect.ratio = 1,
+        legend.position = "none")+
+  #scale_fill_distiller(palette = "Greys") + # for red vs green figures
+  #scale_fill_gradientn(colours = viridis(256, option = "C"))+ #for red vs green figures
+  xlab("Alexa 488")+ #change labels as function of what is plotted
+  ylab("Density")
+```
